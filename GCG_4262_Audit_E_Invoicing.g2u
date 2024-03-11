@@ -1,0 +1,185 @@
+Program.Sub.ScreenSU.Start
+Gui.F_Audit..create
+Gui.F_Audit..caption("E-Invoicing Audit")
+Gui.F_Audit..size(5300,4600)
+Gui.F_Audit..position(0,0)
+Gui.F_Audit..event(UnLoad,f_audit_unload)
+Gui.F_Audit..alwaysontop(False)
+Gui.F_Audit..fontname("Arial")
+Gui.F_Audit..fontsize(8)
+Gui.F_Audit..forecolor(0)
+Gui.F_Audit..BackColor(-2147483633)
+Gui.F_Audit..controlbox(True)
+Gui.F_Audit..maxbutton(False)
+Gui.F_Audit..minbutton(True)
+Gui.F_Audit..mousepointer(0)
+Gui.F_Audit..moveable(True)
+Gui.F_Audit..sizeable(False)
+Gui.F_Audit..ShowInTaskBar(True)
+Gui.F_Audit..titlebar(True)
+Gui.F_Audit..MinX(0)
+Gui.F_Audit..MinY(0)
+Gui.F_Audit.GsAudit.Create(GsGridControl)
+Gui.F_Audit.GsAudit.Size(4830,3780)
+Gui.F_Audit.GsAudit.Position(105,135)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Variable.Global.sCustomer.Declare(String)
+Variable.Global.sContactEmail.Declare(String)
+Variable.Global.sInvoiceNo.Declare(String)
+Variable.Global.sOrderNo.Declare(String)
+Variable.Global.sCustPO.Declare(String)
+Variable.Global.sCustomerName.Declare(String)
+Variable.Global.sCompany.Declare(String)
+Variable.Global.iBIRUNID.Declare(Long,0)
+Variable.Global.iLOGID.Declare(Long,0)
+Variable.Global.bParamCheck.Declare(Boolean,False)
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+v.Local.serror.Declare(String)
+'BN Feb 2, 2017
+'Modified code for project GCG_4262
+'Based on the value in Customer Master -> Options -> Invoice/Credit Memo box.
+'if that value is: 
+'000055 => use report OE_INVOICE_NoBuyGroupRev.RPT, 
+'100003 => use report OE_INVOICE_AddBuyGroupcopyRev.RPT 
+'The customer selected Contact Method A (Customer Master) and does not use method via CRM
+'The customer selected Delivery Method A (Both Print and Email)
+'Script 1 button will be set as "E-Invoice" for Audit
+'Script 2 button will be set as "e-Invoice Cont"
+
+'ATG_INVOICE_DELIVERY.gas is modified to be GCG_4262_INVOICE_DELIVERY.gas. It will set Contacts for script 2 button ("e-Invoice Cont" button) (hook 14370), and used to automatically email when Update Invoice Batches is hit (hook 15225)
+'ATG_AUTO_EMAIL_CUST.gas is modified to be GCG_4262_AUDIT_CUST.gas. It will used for the script 1 button ("E-Invoicing" button)(hook 14360) for the AUDIT.
+
+'Tables used: 
+'ATG_CUSTOMER_EMAIL
+'ATG_CUST_EMAIL_HIST
+'SALESPEOPLE
+'V_SALESPEOPLE
+'CUSTOMER_MASTER
+'CONTACT
+'Cust_Form_Info : to get value from Invoice/Credit Memo
+'ORDER_HIST_HEAD
+'V_CUSTOMER_SALES
+'V_CUSTOMER_MASTER
+'V_PRT_LASER_INVOICE
+'No need for table : 'ATG_EINVOICE_CCC because they only have a single live company code.
+
+'E-Invoicing Audit
+F.Intrinsic.Control.If(V.Caller.Hook,=,14360)
+	F.Intrinsic.Control.If(V.Passed.000002,<>,"")
+		F.ODBC.Connection!conx.OpenConnection(V.Ambient.PDSN,V.Ambient.PUser,V.Ambient.PPass)
+		V.Global.sCustomer.Set(V.Passed.000002)
+		V.Local.sTemp.Declare(String)
+		F.Intrinsic.String.Concat("E-Invoicing for ",V.Passed.000005,V.Local.sTemp)
+		Gui.F_Audit..Caption(V.Local.sTemp)
+		F.Intrinsic.Control.CallSub("Audit")
+	F.Intrinsic.Control.Else
+		F.Intrinsic.UI.Msgbox("Please select a customer")
+		F.Intrinsic.Control.End
+
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: ATG_AUTO_EMAIL_CUST.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+'	F.Intrinsic.Debug.SetLA(V.Local.sError)
+	f.Intrinsic.UI.Msgbox(v.Local.serror)
+	F.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.Main.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.SetErrorHandler("Unload_Err")
+F.Intrinsic.Control.ClearErrors
+
+F.ODBC.Connection!conx.Close
+f.Intrinsic.Control.End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Unload_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: ATG_AUTO_EMAIL_CUST.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.Debug.SetLA(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Unload.End
+
+Program.Sub.f_audit_unload.Start
+F.Intrinsic.Control.SetErrorHandler("f_audit_unload_Err")
+F.Intrinsic.Control.ClearErrors
+
+f.Intrinsic.Control.CallSub("Unload")
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("f_audit_unload_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: ATG_AUTO_EMAIL_CUST.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.Debug.SetLA(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.f_audit_unload.End
+
+Program.Sub.f_audit_resize.Start
+Program.Sub.f_audit_resize.End
+
+Program.Sub.Audit.Start
+F.Intrinsic.Control.SetErrorHandler("Audit_Err")
+F.Intrinsic.Control.ClearErrors
+
+v.Local.serror.Declare(string)
+v.Local.sQuery.Declare(String)
+
+f.Intrinsic.String.Build("SELECT * FROM ATG_CUST_EMAIL_HIST WHERE CUSTOMER = '{0}' ORDER BY INVOICE_NO ASC, EMAIL_DATE ASC",v.Global.sCustomer,v.Local.sQuery)
+'F.Intrinsic.String.Concat("SELECT * FROM ATG_CUST_EMAIL_HIST WHERE CUSTOMER='",V.Global.sCustomer,"' ORDER BY INVOICE_NO ASC, EMAIL_DATE ASC",V.Local.sQuery)
+
+f.Data.DataTable.CreateFromSQL("Audit","conx",v.Local.sQuery,true)		
+Gui.F_Audit.GsAudit.AddGridViewFromDataTable("Audit","Audit")		
+'gui.F_Audit.GsAudit.AddGridviewFromDataview("Audit","Audit","Audit")
+
+gui.F_Audit.GsAudit.SetColumnProperty("Audit","CUSTOMER","Caption","Customer")
+gui.F_Audit.GsAudit.SetColumnProperty("Audit","CUSTOMER","HeaderFontBold",True)
+gui.F_Audit.GsAudit.SetColumnProperty("Audit","CUSTOMER","ReadOnly",True)
+gui.F_Audit.GsAudit.SetColumnProperty("Audit","CUSTOMER","AllowEdit",False)
+
+gui.F_Audit.GsAudit.SetColumnProperty("Audit","EMAIL_DATE","Caption","Email Date")
+gui.F_Audit.GsAudit.SetColumnProperty("Audit","EMAIL_DATE","HeaderFontBold",True)
+gui.F_Audit.GsAudit.SetColumnProperty("Audit","EMAIL_DATE","ReadOnly",True)
+gui.F_Audit.GsAudit.SetColumnProperty("Audit","EMAIL_DATE","AllowEdit",False)
+
+gui.F_Audit.GsAudit.SetColumnProperty("Audit","INVOICE_NO","Caption","Invoice No.")
+gui.F_Audit.GsAudit.SetColumnProperty("Audit","INVOICE_NO","HeaderFontBold",True)
+gui.F_Audit.GsAudit.SetColumnProperty("Audit","INVOICE_NO","ReadOnly",True)
+gui.F_Audit.GsAudit.SetColumnProperty("Audit","INVOICE_NO","AllowEdit",False)
+
+Gui.F_Audit.GsAudit.MainView("Audit")
+
+Gui.F_Audit..Show
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Audit_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: ATG_AUTO_EMAIL_CUST.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.ui.msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.Audit.End
+
+Program.Sub.Comments.Start
+${$0$}$GAB_4227_Overdue_Invoices$}$A. Williams$}$8/30/2016 6:43:30 PM$}$False
+${$3$}$0$}$$}$0$}$-1$}$$}$12:00:00 AM$}$This was coded by FEQ on December 2016. It adds a screen to the script 1 button on the inventory master screen to save furnace information to parts, as well as a screen to add a furnace to a work order on the work order header screen
+Program.Sub.Comments.End
